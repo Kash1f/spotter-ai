@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
     'planner',
 ]
 
@@ -133,3 +134,24 @@ MAILERS = {
 DATA_DIR = BASE_DIR / 'data'
 FUEL_PRICES_CSV = DATA_DIR / 'fuel-prices-for-be-assessment.csv'
 CENSUS_PLACES_ZIP = DATA_DIR / 'census' / '2025_Gaz_place_national.zip'
+
+# Django REST framework: JSON only, no auth (the brief asks for an open API).
+REST_FRAMEWORK = {
+    'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
+    'DEFAULT_PARSER_CLASSES': ['rest_framework.parsers.JSONParser'],
+    'DEFAULT_AUTHENTICATION_CLASSES': [],
+    'DEFAULT_PERMISSION_CLASSES': [],
+    'UNAUTHENTICATED_USER': None,
+    'EXCEPTION_HANDLER': 'planner.handlers.api_exception_handler',
+}
+
+# The vehicle from the brief: 500 miles on a full tank, 10 miles per gallon.
+VEHICLE_RANGE_MILES = 500.0
+VEHICLE_MPG = 10.0
+# How far from the route a station may be and still count as "on" it. Stations
+# are placed at their town centre, so this is deliberately forgiving.
+STATION_CORRIDOR_MILES = 5.0
+
+# Free routing API: the public OSRM demo server, no key needed.
+OSRM_BASE_URL = 'https://router.project-osrm.org'
+ROUTING_TIMEOUT_SECONDS = 20

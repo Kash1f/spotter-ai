@@ -1,0 +1,69 @@
+{
+  "info": {
+    "name": "Fuel route planner",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [{ "key": "base_url", "value": "http://localhost:8000" }],
+  "item": [
+    {
+      "name": "Chicago to Houston",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"start\": \"Chicago, IL\",\n  \"finish\": \"Houston, TX\"\n}" },
+        "url": "{{base_url}}/api/v1/route/"
+      }
+    },
+    {
+      "name": "New York to Los Angeles",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"start\": \"New York, NY\",\n  \"finish\": \"Los Angeles, CA\"\n}" },
+        "url": "{{base_url}}/api/v1/route/"
+      }
+    },
+    {
+      "name": "Short trip, no fuel stop (Chicago to Milwaukee)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"start\": \"Chicago, IL\",\n  \"finish\": \"Milwaukee, WI\"\n}" },
+        "url": "{{base_url}}/api/v1/route/"
+      }
+    },
+    {
+      "name": "Coordinates instead of names (GET)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/api/v1/route/?start=41.88,-87.63&finish=29.76,-95.37",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "route", ""],
+          "query": [
+            { "key": "start", "value": "41.88,-87.63" },
+            { "key": "finish", "value": "29.76,-95.37" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Error: unknown place (400)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"start\": \"Nowhere, ZZ\",\n  \"finish\": \"Houston, TX\"\n}" },
+        "url": "{{base_url}}/api/v1/route/"
+      }
+    },
+    {
+      "name": "Error: missing field (400)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"start\": \"Chicago, IL\"\n}" },
+        "url": "{{base_url}}/api/v1/route/"
+      }
+    }
+  ]
+}
