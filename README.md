@@ -4,7 +4,8 @@ A Django API that takes a start and a finish in the USA and returns the driving
 route, the cheapest places to refuel along it, and the total fuel cost, for a
 vehicle with a 500 mile range that does 10 miles per gallon.
 
-- One call to a free routing API (OSRM) per request.
+- One call to a free routing API (OSRM) per request, and none for a trip that
+  has been planned before (the finished plan is cached in Redis).
 - Fuel stops are chosen by an exact optimizer, not a heuristic.
 - The 6,626 US stations in the supplied price file are held in memory, so apart
   from the routing call everything is local and fast.
@@ -13,7 +14,7 @@ vehicle with a 500 mile range that does 10 miles per gallon.
 
 The app uses PostgreSQL.
 
-### With Docker (API and database)
+### With Docker (API, database and cache)
 
 ```bash
 docker compose up --build
@@ -44,6 +45,19 @@ To use a different database, set `POSTGRES_HOST`, `POSTGRES_PORT`,
 `POSTGRES_DB`, `POSTGRES_USER` and `POSTGRES_PASSWORD`. The defaults match the
 compose file.
 
+Without `REDIS_URL` set, plans are cached in the server process instead, which
+works but is lost on restart. To use the compose Redis (published on port 6380
+so it cannot clash with a Redis installed on your machine), run
+`docker compose up -d cache` and set `REDIS_URL=redis://localhost:6380/0`.
+
+## The map page
+
+Open http://localhost:8000/fuel-planner/ for a map of the route. Enter a start
+and a finish and it draws the route with a numbered pin on each fuel stop, and
+shows the total fuel cost beside it. It is only a client of the API below: every
+plan on screen comes from `POST /api/v1/route/`. A link such as
+`/fuel-planner/?start=Boston, MA&finish=Denver, CO` opens straight on that trip.
+
 ## The API
 
 `POST /api/v1/route/` with a JSON body, or `GET` with the same fields in the query string.
@@ -63,7 +77,8 @@ The response contains:
 - `summary`: `distance_miles`, `duration_hours`, `fuel_stops`, `total_fuel_cost`, `gallons_purchased`, `gallons_used`.
 - `fuel_stops`: each stop's name, town, coordinates, `mile_marker`, `price_per_gallon`, `gallons_purchased` and `cost`.
 - `route`: the route as a GeoJSON `Feature` (a `LineString`), which any map client can draw.
-- `meta`: `routing_api_calls` (always 1) and `elapsed_ms`.
+- `meta`: `served_from` (`routing api` or `cache`), `routing_api_calls` (1, or 0
+  when the plan came from the cache) and `elapsed_ms`.
 
 `total_fuel_cost` is the fuel bought on the way. The vehicle starts with a full
 tank and arrives empty, so a trip under 500 miles needs no stop and costs $0.
@@ -92,6 +107,10 @@ A Postman collection is in [docs/postman_collection.json](docs/postman_collectio
 4. **Choose the stops.** A look-ahead greedy: at each station, if a cheaper one
    is within a tank's reach buy just enough to get there, otherwise fill up. This
    provably minimises the fuel bill. See `planner/services/optimizer.py`.
+5. **Cache.** The finished plan is stored in Redis for an hour, keyed by the
+   trip's coordinates, so a repeat makes no routing call and returns in about 15
+   ms instead of 0.5 to 1 second. If the cache is down the trip is planned
+   without it.
 
 The price file has no coordinates, so each station is placed at the centre of
 its town using the Census file. Stations whose town the Census does not list
@@ -104,7 +123,8 @@ python manage.py test
 ```
 
 The optimizer is checked against brute force on random routes. OSRM is mocked,
-so the suite makes no network calls. It needs the database to be running, for
+so the suite makes no network calls, and it always uses a private in-process
+cache, never Redis. It needs the database to be running, for
 example `docker compose up -d db`; Django creates and removes its own test
 database next to the real one.
 
@@ -116,6 +136,8 @@ database next to the real one.
   slightly cheaper pump costs nothing in the model.
 - Canadian stations in the price file are ignored.
 - The public OSRM demo server has no uptime guarantee.
+- Cached plans live for an hour (`PLAN_CACHE_SECONDS`). After re-importing the
+  stations, clear the cache (`docker compose exec cache redis-cli flushdb`).
 
 ## Data sources
 

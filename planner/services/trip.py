@@ -1,21 +1,34 @@
-"""Plan a trip: resolve the endpoints, fetch the route, pick the fuel stops."""
+"""Plan a trip: resolve the endpoints, fetch the route, pick the fuel stops.
 
+The finished plan is cached, keyed by the trip's coordinates and the vehicle
+settings, so asking for the same trip again makes no routing call and does no
+matching or optimising.
+"""
+
+import hashlib
+import logging
 import time
 from decimal import ROUND_HALF_UP, Decimal
 
 import numpy as np
 from django.conf import settings
+from django.core.cache import cache
 
 from .optimizer import Candidate, plan_fuel_stops
 from .places import resolve_location
 from .routing import get_route
 from .stations import stations_along
 
+logger = logging.getLogger(__name__)
+
 CENT = Decimal('0.01')
 # The full geometry runs to tens of thousands of points on a cross-country
 # route. Matching uses all of it; the response carries a thinned copy that
 # still draws cleanly.
 MAX_GEOMETRY_POINTS = 3000
+
+FROM_CACHE = 'cache'
+FROM_ROUTING_API = 'routing api'
 
 
 def _money(value):
@@ -31,12 +44,34 @@ def _thin(coordinates):
     return np.round(coordinates[keep], 5).tolist()
 
 
-def plan_trip(start_text, finish_text):
-    started = time.perf_counter()
-    range_miles, mpg = settings.VEHICLE_RANGE_MILES, settings.VEHICLE_MPG
+# The cache is an optimisation: if it is down, plan the trip without it.
 
-    start = resolve_location(start_text)
-    finish = resolve_location(finish_text)
+def _cache_get(key):
+    try:
+        return cache.get(key)
+    except Exception:
+        logger.warning('Cache read failed', exc_info=True)
+        return None
+
+
+def _cache_set(key, value):
+    try:
+        cache.set(key, value, settings.PLAN_CACHE_SECONDS)
+    except Exception:
+        logger.warning('Cache write failed', exc_info=True)
+
+
+def _plan_key(start, finish):
+    trip = (
+        round(start.lat, 5), round(start.lon, 5), round(finish.lat, 5), round(finish.lon, 5),
+        settings.VEHICLE_RANGE_MILES, settings.VEHICLE_MPG, settings.STATION_CORRIDOR_MILES,
+    )
+    return 'plan:' + hashlib.sha256(repr(trip).encode()).hexdigest()[:32]
+
+
+def _build_plan(start, finish):
+    """Everything in the response that depends only on the trip, not on how it was typed."""
+    range_miles, mpg = settings.VEHICLE_RANGE_MILES, settings.VEHICLE_MPG
     route = get_route(start, finish)  # the only external call
 
     on_route = stations_along(route.coordinates, route.distance_miles, settings.STATION_CORRIDOR_MILES)
@@ -73,8 +108,6 @@ def plan_trip(start_text, finish_text):
         })
 
     return {
-        'start': {'query': start.query, 'name': start.name, 'lat': start.lat, 'lon': start.lon},
-        'finish': {'query': finish.query, 'name': finish.name, 'lat': finish.lat, 'lon': finish.lon},
         'summary': {
             'distance_miles': round(route.distance_miles, 1),
             'duration_hours': round(route.duration_seconds / 3600, 2),
@@ -90,9 +123,35 @@ def plan_trip(start_text, finish_text):
             'type': 'Feature',
             'geometry': {'type': 'LineString', 'coordinates': _thin(route.coordinates)},
         },
+        'stations_considered': len(on_route),
+    }
+
+
+def plan_trip(start_text, finish_text):
+    started = time.perf_counter()
+    start = resolve_location(start_text)
+    finish = resolve_location(finish_text)
+
+    key = _plan_key(start, finish)
+    built = _cache_get(key)
+    if built is None:
+        built = _build_plan(start, finish)
+        _cache_set(key, built)
+        served_from, api_calls = FROM_ROUTING_API, 1
+    else:
+        served_from, api_calls = FROM_CACHE, 0
+
+    return {
+        'start': {'query': start.query, 'name': start.name, 'lat': start.lat, 'lon': start.lon},
+        'finish': {'query': finish.query, 'name': finish.name, 'lat': finish.lat, 'lon': finish.lon},
+        'summary': built['summary'],
+        'vehicle': built['vehicle'],
+        'fuel_stops': built['fuel_stops'],
+        'route': built['route'],
         'meta': {
-            'routing_api_calls': 1,
-            'stations_considered': len(on_route),
+            'served_from': served_from,
+            'routing_api_calls': api_calls,
+            'stations_considered': built['stations_considered'],
             'elapsed_ms': round((time.perf_counter() - started) * 1000, 1),
         },
     }

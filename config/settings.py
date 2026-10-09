@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -162,3 +163,33 @@ STATION_CORRIDOR_MILES = 5.0
 # Free routing API: the public OSRM demo server, no key needed.
 OSRM_BASE_URL = 'https://router.project-osrm.org'
 ROUTING_TIMEOUT_SECONDS = 20
+
+# How long a finished plan is reused, in seconds.
+PLAN_CACHE_SECONDS = int(os.environ.get('PLAN_CACHE_SECONDS', 3600))
+
+# Redis when REDIS_URL is set (docker compose sets it), so every worker shares
+# one cache and it survives restarts; otherwise a per-process cache that needs
+# no service. The test suite clears the cache freely, so it always gets a
+# private one and never touches Redis.
+if os.environ.get('REDIS_URL') and sys.argv[1:2] != ['test']:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': os.environ['REDIS_URL'],
+            'KEY_PREFIX': 'fuelroute',
+        }
+    }
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'OPTIONS': {'MAX_ENTRIES': 500},
+        }
+    }
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {'console': {'class': 'logging.StreamHandler'}},
+    'loggers': {'planner': {'handlers': ['console'], 'level': 'INFO'}},
+}

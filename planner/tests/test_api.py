@@ -1,6 +1,7 @@
 from unittest import mock
 
 import numpy as np
+from django.core.cache import cache
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
@@ -42,6 +43,7 @@ class RouteApiTests(TestCase):
     def setUp(self):
         station_index.reset_index()
         self.addCleanup(station_index.reset_index)
+        cache.clear()  # a plan cached by one test must not answer another
 
     @staticmethod
     def straight_route():
@@ -89,3 +91,34 @@ class RouteApiTests(TestCase):
         with mock.patch('planner.services.trip.get_route', return_value=self.straight_route()):
             response = self.client.get(URL, {'start': 'Startville, IL', 'finish': 'Endtown, OH'})
         self.assertEqual(response.status_code, 200)
+
+    def test_repeat_trip_is_served_from_cache_without_a_routing_call(self):
+        with mock.patch('planner.services.trip.get_route', return_value=self.straight_route()) as route:
+            first = self.post(start='Startville, IL', finish='Endtown, OH').json()
+            # Typed differently, but the same trip.
+            second = self.post(start='startville il', finish='ENDTOWN, OH').json()
+        route.assert_called_once()
+        self.assertEqual(first['meta']['served_from'], 'routing api')
+        self.assertEqual(first['meta']['routing_api_calls'], 1)
+        self.assertEqual(second['meta']['served_from'], 'cache')
+        self.assertEqual(second['meta']['routing_api_calls'], 0)
+        self.assertEqual(second['summary'], first['summary'])
+        self.assertEqual(second['fuel_stops'], first['fuel_stops'])
+        # What the caller typed is echoed back fresh, not taken from the cache.
+        self.assertEqual(second['start']['query'], 'startville il')
+
+    def test_a_cache_outage_does_not_fail_the_request(self):
+        with mock.patch('planner.services.trip.get_route', return_value=self.straight_route()), \
+                mock.patch('planner.services.trip.cache.get', side_effect=ConnectionError), \
+                mock.patch('planner.services.trip.cache.set', side_effect=ConnectionError):
+            response = self.post(start='Startville, IL', finish='Endtown, OH')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['meta']['served_from'], 'routing api')
+
+
+class FuelPlannerPageTests(SimpleTestCase):
+    def test_page_renders_and_points_at_the_api(self):
+        response = self.client.get('/fuel-planner/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="map"')
+        self.assertContains(response, URL)
