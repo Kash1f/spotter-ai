@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -74,10 +75,16 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
+# PostgreSQL. The defaults match the "db" service in docker-compose.yml, whose
+# port is published on 5433, so "docker compose up -d db" is all a local run needs.
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.environ.get('POSTGRES_DB', 'fuelroute'),
+        'USER': os.environ.get('POSTGRES_USER', 'fuelroute'),
+        'PASSWORD': os.environ.get('POSTGRES_PASSWORD', 'fuelroute'),
+        'HOST': os.environ.get('POSTGRES_HOST', 'localhost'),
+        'PORT': os.environ.get('POSTGRES_PORT', '5433'),
     }
 }
 
@@ -133,7 +140,7 @@ MAILERS = {
 
 DATA_DIR = BASE_DIR / 'data'
 FUEL_PRICES_CSV = DATA_DIR / 'fuel-prices-for-be-assessment.csv'
-CENSUS_PLACES_ZIP = DATA_DIR / 'census' / '2025_Gaz_place_national.zip'
+CENSUS_PLACES_ZIP = DATA_DIR / 'coordinates' / '2025_Gaz_place_national.zip'
 
 # Django REST framework: JSON only, no auth (the brief asks for an open API).
 REST_FRAMEWORK = {

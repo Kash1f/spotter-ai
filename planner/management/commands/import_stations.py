@@ -15,8 +15,12 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('--csv', default=str(settings.FUEL_PRICES_CSV))
+        parser.add_argument('--if-empty', action='store_true', help='Do nothing if stations are already loaded.')
 
     def handle(self, *args, **options):
+        if options['if_empty'] and FuelStation.objects.exists():
+            self.stdout.write('Stations already loaded, skipping.')
+            return
         if not Place.objects.exists():
             raise CommandError('No places loaded. Run "python manage.py import_places" first.')
         try:

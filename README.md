@@ -11,9 +11,26 @@ vehicle with a 500 mile range that does 10 miles per gallon.
 
 ## Run it
 
-Needs Python 3.12 or newer (Django 6.1).
+The app uses PostgreSQL.
+
+### With Docker (API and database)
 
 ```bash
+docker compose up --build
+```
+
+The first start applies the migrations and loads the places and stations, which
+takes a few seconds. After that the API is at http://localhost:8000/api/v1/route/.
+Later starts skip the loading, because the data is kept in a Docker volume.
+
+### Without Docker for the API
+
+Needs Python 3.12 or newer (Django 6.1) and a PostgreSQL database. The compose
+file provides one, published on port 5433 so it cannot clash with a Postgres
+installed on your machine:
+
+```bash
+docker compose up -d db
 python -m venv .venv
 .venv\Scripts\activate            # Windows; on macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
@@ -22,6 +39,10 @@ python manage.py import_places    # US towns from the Census Gazetteer
 python manage.py import_stations  # fuel stations from the price file
 python manage.py runserver
 ```
+
+To use a different database, set `POSTGRES_HOST`, `POSTGRES_PORT`,
+`POSTGRES_DB`, `POSTGRES_USER` and `POSTGRES_PASSWORD`. The defaults match the
+compose file.
 
 ## The API
 
@@ -83,7 +104,9 @@ python manage.py test
 ```
 
 The optimizer is checked against brute force on random routes. OSRM is mocked,
-so the suite makes no network calls.
+so the suite makes no network calls. It needs the database to be running, for
+example `docker compose up -d db`; Django creates and removes its own test
+database next to the real one.
 
 ## Limitations
 

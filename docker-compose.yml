@@ -1,0 +1,36 @@
+# API on PostgreSQL.
+#
+#   docker compose up --build
+#   http://localhost:8000/api/v1/route/
+#
+# The credentials below are for this local stack only.
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: fuelroute
+      POSTGRES_USER: fuelroute
+      POSTGRES_PASSWORD: fuelroute
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U fuelroute -d fuelroute"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  web:
+    build: .
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432  # inside the compose network, not the published port
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

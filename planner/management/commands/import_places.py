@@ -35,8 +35,12 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('--zip', default=str(settings.CENSUS_PLACES_ZIP), help='Gazetteer zip file.')
+        parser.add_argument('--if-empty', action='store_true', help='Do nothing if places are already loaded.')
 
     def handle(self, *args, **options):
+        if options['if_empty'] and Place.objects.exists():
+            self.stdout.write('Places already loaded, skipping.')
+            return
         try:
             archive = zipfile.ZipFile(options['zip'])
         except (OSError, zipfile.BadZipFile) as exc:
