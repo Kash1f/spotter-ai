@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'planner',
 ]
 
 MIDDLEWARE = [
@@ -125,3 +126,10 @@ MAILERS = {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
+
+
+# Fuel route planner
+
+DATA_DIR = BASE_DIR / 'data'
+FUEL_PRICES_CSV = DATA_DIR / 'fuel-prices-for-be-assessment.csv'
+CENSUS_PLACES_ZIP = DATA_DIR / 'census' / '2025_Gaz_place_national.zip'
